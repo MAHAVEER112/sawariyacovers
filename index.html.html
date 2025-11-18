@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sawariya Collection — Buyer + Seller (Firestore)</title>
+  <meta name="description" content="Single-file buyer + seller pages using Firestore (no Storage). Add / edit / delete products, realtime updates." />
+  <style>
+    :root{--accent:#ff4d88;--accent2:#33d6ff;--bg:#0b1020;--card:#0f1724}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,#071133,#071a2f);color:#fff}
+    .wrap{max-width:1080px;margin:28px auto;padding:18px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;color:#071133;font-weight:700}
+    h1{margin:0;font-size:20px}
+    .lead{color:rgba(255,255,255,0.7);font-size:13px}
+
+    .controls{display:flex;gap:8px}
+    .btn{background:rgba(255,255,255,0.06);border:0;padding:10px 12px;border-radius:10px;color:#fff;cursor:pointer}
+    .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#071133;font-weight:700}
+
+    .layout{display:grid;grid-template-columns:360px 1fr;gap:18px;margin-top:18px}
+    aside.card{background:rgba(255,255,255,0.03);padding:16px;border-radius:14px}
+    main{min-height:60vh}
+    .muted{color:rgba(255,255,255,0.6);font-size:13px}
+    input,textarea{width:100%;padding:10px;border-radius:8px;border:0;background:rgba(255,255,255,0.02);color:#fff}
+    label{font-size:13px;color:rgba(255,255,255,0.8);display:block;margin-bottom:6px}
+    .small{font-size:12px;color:rgba(255,255,255,0.6)}
+
+    .hero{background:linear-gradient(135deg,rgba(255,122,182,0.04),rgba(107,229,255,0.02));padding:16px;border-radius:14px}
+    .slider{display:flex;gap:12px;overflow:hidden}
+    .slide-track{display:flex;gap:14px;transition:transform 700ms cubic-bezier(.22,.9,.2,1)}
+    .product-card{width:190px;background:rgba(255,255,255,0.03);padding:10px;border-radius:12px}
+    .product-card img{width:100%;height:170px;object-fit:cover;border-radius:8px}
+
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-top:16px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:12px;border-radius:12px}
+
+    .admin-area{margin-top:12px}
+    .actions{display:flex;gap:8px;justify-content:flex-end}
+
+    @media (max-width:980px){.layout{grid-template-columns:1fr}.slider{overflow:auto}}
+  </style>
+
+  <!-- Using Firebase v8 namespaced SDK for simple code in a single file -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo">SC</div>
+        <div>
+          <h1>Sawariya Collection</h1>
+          <div class="lead">Buyer + Seller (Firestore) — add/edit/delete products. No Storage required — use image URLs.</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn" id="loginBtn">Admin Login</button>
+        <button class="btn" id="logoutBtn" style="display:none">Logout</button>
+        <button class="btn primary" id="resetBtn">Reset Sample Data</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="card" id="sidebar">
+        <h3>Seller Panel</h3>
+        <div class="muted">Login to manage products. (Default admin password: <strong>sawariyaAdmin</strong>)</div>
+
+        <div id="adminControls" style="display:none" class="admin-area">
+          <label>Product Name</label>
+          <input id="pname" placeholder="Pink Marble Case" />
+
+          <label>Price (₹)</label>
+          <input id="pprice" type="number" placeholder="499" />
+
+          <label>Image URL</label>
+          <input id="pimage" placeholder="https://...jpg" />
+
+          <label>Description</label>
+          <textarea id="pdesc" placeholder="Short description"></textarea>
+
+          <div style="height:10px"></div>
+          <div class="actions">
+            <button class="btn" id="cancelEdit" style="display:none">Cancel Edit</button>
+            <button class="btn primary" id="saveBtn">Save Product</button>
+          </div>
+        </div>
+
+        <div id="notLogged" class="muted" style="margin-top:12px">You are not logged in as admin.</div>
+      </aside>
+
+      <main>
+        <section class="hero">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div>
+              <h2 style="margin:0">Featured Covers</h2>
+              <div class="muted">Realtime • Auto-play slider • Drag to control</div>
+            </div>
+            <div class="muted">Auto-play • Drag to control</div>
+          </div>
+
+          <div class="slider" id="sliderRoot">
+            <div class="slide-track" id="slideTrack"></div>
+          </div>
+        </section>
+
+        <div style="height:18px"></div>
+
+        <section>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <h3 style="margin:0">All Products</h3>
+            <div class="muted" id="count"></div>
+          </div>
+
+          <div class="grid" id="productGrid"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    // ---------- FIREBASE CONFIG (YOUR NEW PROJECT) ----------
+    const firebaseConfig = {
+      apiKey: "AIzaSyCWPVrcm_I54yl-Qi4dwGvxcuIRlGaZ6ws",
+      authDomain: "sawariyaji-37a55.firebaseapp.com",
+      projectId: "sawariyaji-37a55",
+      storageBucket: "sawariyaji-37a55.firebasestorage.app",
+      messagingSenderId: "471165159946",
+      appId: "1:471165159946:web:26af88ac7ed5c08d982df3",
+      measurementId: "G-SVW41JRNDQ"
+    };
+
+    // Initialize firebase (v8 namespaced)
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // ---------- ADMIN AUTH (very simple local auth) ----------
+    // NOTE: This is a lightweight client-side only admin gate. Not secure for production.
+    const ADMIN_PASSWORD = 'sawariyaAdmin'; // change this in the file for more security
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const adminControls = document.getElementById('adminControls');
+    const notLogged = document.getElementById('notLogged');
+
+    function setLoggedIn(state){
+      if(state){
+        loginBtn.style.display='none'; logoutBtn.style.display='inline-block'; adminControls.style.display='block'; notLogged.style.display='none';
+      } else {
+        loginBtn.style.display='inline-block'; logoutBtn.style.display='none'; adminControls.style.display='none'; notLogged.style.display='block';
+      }
+      localStorage.setItem('sc_admin', state? '1':'0');
+    }
+
+    // persist
+    if(localStorage.getItem('sc_admin')==='1') setLoggedIn(true);
+
+    loginBtn.addEventListener('click', ()=>{
+      const pass = prompt('Enter admin password:');
+      if(pass === ADMIN_PASSWORD){ setLoggedIn(true); alert('Logged in!'); }
+      else alert('Wrong password');
+    });
+    logoutBtn.addEventListener('click', ()=>{ setLoggedIn(false); });
+
+    // ---------- PRODUCT CRUD ----------
+    const pname = document.getElementById('pname');
+    const pprice = document.getElementById('pprice');
+    const pimage = document.getElementById('pimage');
+    const pdesc = document.getElementById('pdesc');
+    const saveBtn = document.getElementById('saveBtn');
+    const cancelEdit = document.getElementById('cancelEdit');
+
+    let editingId = null;
+
+    saveBtn.addEventListener('click', ()=>{
+      if(localStorage.getItem('sc_admin')!=='1'){ alert('Login as admin first'); return; }
+      const name = pname.value.trim();
+      const price = Number(pprice.value);
+      const image = pimage.value.trim();
+      const desc = pdesc.value.trim();
+      if(!name || !price || !image){ alert('Name, price and image URL required'); return; }
+
+      if(editingId){
+        db.collection('products').doc(editingId).update({ name, price, image, desc, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }).then(()=>{
+          clearForm(); editingId=null; cancelEdit.style.display='none'; alert('Updated');
+        }).catch(err=>alert(err.message));
+      } else {
+        db.collection('products').add({ name, price, image, desc, createdAt: firebase.firestore.FieldValue.serverTimestamp() }).then(()=>{
+          clearForm(); alert('Added');
+        }).catch(err=>alert(err.message));
+      }
+    });
+
+    cancelEdit.addEventListener('click', ()=>{ editingId=null; clearForm(); cancelEdit.style.display='none'; });
+
+    function clearForm(){ pname.value=''; pprice.value=''; pimage.value=''; pdesc.value=''; }
+
+    // Edit / Delete helpers (exposed to window for inline buttons)
+    window.editProduct = function(id){
+      if(localStorage.getItem('sc_admin')!=='1'){ alert('Login as admin first'); return; }
+      db.collection('products').doc(id).get().then(doc=>{
+        if(!doc.exists) return alert('Not found');
+        const d = doc.data(); editingId = id; pname.value=d.name || ''; pprice.value=d.price || ''; pimage.value=d.image || ''; pdesc.value=d.desc || ''; cancelEdit.style.display='inline-block'; window.scrollTo({top:0,behavior:'smooth'});
+      });
+    }
+    window.deleteProduct = function(id){
+      if(localStorage.getItem('sc_admin')!=='1'){ alert('Login as admin first'); return; }
+      if(!confirm('Delete this product?')) return; db.collection('products').doc(id).delete().then(()=>alert('Deleted')).catch(e=>alert(e.message));
+    }
+
+    // ---------- SAMPLE DATA RESET ----------
+    document.getElementById('resetBtn').addEventListener('click', ()=>{
+      if(!confirm('This will replace products with sample data. Continue?')) return;
+      // delete all then add sample
+      db.collection('products').get().then(snap=>{
+        const batch = db.batch();
+        snap.forEach(d=>batch.delete(d.ref));
+        return batch.commit();
+      }).then(()=>{
+        const samples = [
+          {name:'Pink Marble Case',price:499,image:'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80',desc:'Soft TPU marble'},
+          {name:'Neon Splash',price:599,image:'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?w=800&q=80',desc:'Vivid neon'},
+          {name:'Minimal Black',price:399,image:'https://images.unsplash.com/photo-1503602642458-232111445657?w=800&q=80',desc:'Matte slim'}
+        ];
+        const promises = samples.map(s=>db.collection('products').add({...s,createdAt:firebase.firestore.FieldValue.serverTimestamp()}));
+        return Promise.all(promises);
+      }).then(()=>alert('Sample data added')).catch(e=>alert(e.message));
+    });
+
+    // ---------- RENDER UI & REALTIME LISTENER ----------
+    const productGrid = document.getElementById('productGrid');
+    const countEl = document.getElementById('count');
+    const slideTrack = document.getElementById('slideTrack');
+
+    function renderProducts(docs){
+      productGrid.innerHTML=''; slideTrack.innerHTML='';
+      const arr = docs.map(d=>({id:d.id, ...d.data()}));
+      countEl.textContent = arr.length + ' products';
+
+      // slider use top 6
+      const sliderItems = arr.slice(0,6);
+      sliderItems.forEach(p=>{
+        const el = document.createElement('div'); el.className='product-card';
+        el.innerHTML = `<div style=\"position:relative\"><img src=\"${p.image}\" alt=\"${escapeHtml(p.name)}\" /><div style=\"position:absolute;left:10px;top:10px;padding:6px 8px;border-radius:8px;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#071133;font-weight:700;\">₹${p.price}</div></div><div style=\"padding-top:8px\"><strong>${escapeHtml(p.name)}</strong><div class=\"muted\">${escapeHtml(p.desc||'')}</div></div>`;
+        slideTrack.appendChild(el);
+      });
+
+      // grid
+      arr.forEach(p=>{
+        const card = document.createElement('div'); card.className='card';
+        card.innerHTML = `
+          <div style=\"display:flex;gap:12px;align-items:center\"> 
+            <img src=\"${p.image}\" style=\"width:96px;height:96px;object-fit:cover;border-radius:10px\"/> 
+            <div style=\"flex:1\"> <strong>${escapeHtml(p.name)}</strong><div class=\"small\">${escapeHtml(p.desc||'')}</div></div>
+            <div style=\"text-align:right\"> <div style=\"font-weight:700;color:var(--accent)\">₹${p.price}</div>
+              <div class=\"muted\" style=\"font-size:12px\">ID: ${p.id}</div>
+            </div>
+          </div>
+          <div style=\"margin-top:10px;display:flex;gap:8px;justify-content:flex-end\"> 
+            <button class=\"btn\" onclick=\"editProduct('${p.id}')\">Edit</button>
+            <button class=\"btn\" onclick=\"deleteProduct('${p.id}')\">Delete</button>
+          </div>`;
+        productGrid.appendChild(card);
+      });
+    }
+
+    function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]}); }
+
+    // realtime listener
+    db.collection('products').orderBy('createdAt','desc').onSnapshot(snap=>{
+      renderProducts(snap.docs);
+    });
+
+    // ---------- SIMPLE AUTO SLIDER ----------
+    let px=0, autoId=null;
+    function startSlider(){ if(autoId) clearInterval(autoId); const track = slideTrack; autoId = setInterval(()=>{ px+=2; track.style.transform = `translateX(${-px}px)`; const max = track.scrollWidth/2; if(px>=max) px=0; },16); }
+    startSlider();
+
+    // allow drag
+    let isDown=false,startX=0;
+    slideTrack.parentElement.addEventListener('pointerdown', (e)=>{ isDown=true; startX=e.clientX; slideTrack.style.transition='none'; });
+    window.addEventListener('pointerup', ()=>{ isDown=false; slideTrack.style.transition='transform 700ms cubic-bezier(.22,.9,.2,1)'; });
+    window.addEventListener('pointermove',(e)=>{ if(!isDown) return; const dx=e.clientX-startX; px = Math.max(0, px-dx); slideTrack.style.transform=`translateX(${-px}px)`; startX=e.clientX; });
+
+    // ---------- DONE ----------
+    console.log('App ready');
+  </script>
+</body>
+</html>
